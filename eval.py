@@ -10,7 +10,7 @@ from util import correct_preds
 
 def eval(model, split, seq_length, n_cpu, disp):
     dataset = GolfDB(data_file='data/val_split_{}.pkl'.format(split),
-                     vid_dir='data/videos_160/',
+                     vid_dir='local_data/videos_160/',
                      seq_length=seq_length,
                      transform=transforms.Compose([ToTensor(),
                                                    Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]),

@@ -88,7 +88,7 @@ if __name__ == '__main__':
     norm = Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])  # ImageNet mean and std (RGB)
 
     dataset = GolfDB(data_file='data/train_split_1.pkl',
-                     vid_dir='data/videos_160/',
+                     vid_dir='local_data/videos_160/',
                      seq_length=64,
                      transform=transforms.Compose([ToTensor(), norm]),
                      train=False)
