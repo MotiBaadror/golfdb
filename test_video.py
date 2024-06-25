@@ -1,8 +1,13 @@
 import argparse
+import os
+
 import cv2
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+
+from config import Config
+from dir_configs import add_rootpath
 from eval import ToTensor, Normalize
 from model import EventDetector
 import numpy as np
@@ -56,40 +61,43 @@ class SampleVideo(Dataset):
             sample = self.transform(sample)
         return sample
 
+class Handler():
+    def __init__(self):
+        self.model = EventDetector(pretrain=True,
+                              width_mult=1.,
+                              lstm_layers=1,
+                              lstm_hidden=256,
+                              bidirectional=True,
+                              dropout=False)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--path', help='Path to video that you want to test', default='test_video.mp4')
-    parser.add_argument('-s', '--seq-length', type=int, help='Number of frames to use per forward pass', default=64)
-    args = parser.parse_args()
-    seq_length = args.seq_length
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.save_dict = torch.load(add_rootpath('models/swingnet_1800.pth.tar'), map_location=torch.device('cpu'))
+        print('Using device:', self.device)
+        self.model.load_state_dict(self.save_dict['model_state_dict'])
+        self.model.to(self.device)
+        self.model.eval()
+        print("Loaded model weights")
 
-    print('Preparing video: {}'.format(args.path))
+# if __name__ == '__main__':
+def process_video(config:Config, handler: Handler):
+    seq_length = config.seq_length
+    video_path = os.path.join(config.input_path, config.video_name)
 
-    ds = SampleVideo(args.path, transform=transforms.Compose([ToTensor(),
+    print('Preparing video: {}'.format(video_path))
+
+    ds = SampleVideo(video_path, transform=transforms.Compose([ToTensor(),
                                 Normalize([0.485, 0.456, 0.406],
                                           [0.229, 0.224, 0.225])]))
 
     dl = DataLoader(ds, batch_size=1, shuffle=False, drop_last=False)
 
-    model = EventDetector(pretrain=True,
-                          width_mult=1.,
-                          lstm_layers=1,
-                          lstm_hidden=256,
-                          bidirectional=True,
-                          dropout=False)
+    # model = handler.model
 
-    try:
-        save_dict = torch.load('models/swingnet_1800.pth.tar')
-    except:
-        print("Model weights not found. Download model weights and place in 'models' folder. See README for instructions")
+    # try:
+    # except:
+    #     print("Model weights not found. Download model weights and place in 'models' folder. See README for instructions")
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print('Using device:', device)
-    model.load_state_dict(save_dict['model_state_dict'])
-    model.to(device)
-    model.eval()
-    print("Loaded model weights")
+
 
     print('Testing...')
     for sample in dl:
@@ -101,7 +109,7 @@ if __name__ == '__main__':
                 image_batch = images[:, batch * seq_length:, :, :, :]
             else:
                 image_batch = images[:, batch * seq_length:(batch + 1) * seq_length, :, :, :]
-            logits = model(image_batch.cuda())
+            logits = handler.model(image_batch.to(handler.device))
             if batch == 0:
                 probs = F.softmax(logits.data, dim=1).cpu().numpy()
             else:
@@ -110,19 +118,26 @@ if __name__ == '__main__':
 
     events = np.argmax(probs, axis=0)[:-1]
     print('Predicted event frames: {}'.format(events))
-    cap = cv2.VideoCapture(args.path)
+    cap = cv2.VideoCapture(video_path)
 
     confidence = []
     for i, e in enumerate(events):
         confidence.append(probs[e, i])
     print('Condifence: {}'.format([np.round(c, 3) for c in confidence]))
 
+    output_seq = []
     for i, e in enumerate(events):
         cap.set(cv2.CAP_PROP_POS_FRAMES, e)
         _, img = cap.read()
         cv2.putText(img, '{:.3f}'.format(confidence[i]), (20, 20), cv2.FONT_HERSHEY_DUPLEX, 0.75, (0, 0, 255))
-        cv2.imshow(event_names[i], img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        output_seq.append(img)
+    output_array = np.concatenate(output_seq, axis=1)
+    cv2.imwrite(f"{config.output_path}/{config.video_name[:-4]}.jpg", output_array)
+
+        # cv2.imshow(event_names[i], img)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+    return output_array
 
 

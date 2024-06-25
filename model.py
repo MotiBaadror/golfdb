@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from MobileNetV2 import MobileNetV2
+from dir_configs import add_rootpath
 
 
 class EventDetector(nn.Module):
@@ -13,8 +14,9 @@ class EventDetector(nn.Module):
         self.bidirectional = bidirectional
         self.dropout = dropout
 
+
         net = MobileNetV2(width_mult=width_mult)
-        state_dict_mobilenet = torch.load('mobilenet_v2.pth.tar')
+        state_dict_mobilenet = torch.load(add_rootpath('mobilenet_v2.pth.tar'), map_location=torch.device('cpu'))
         if pretrain:
             net.load_state_dict(state_dict_mobilenet)
 
@@ -30,12 +32,14 @@ class EventDetector(nn.Module):
             self.drop = nn.Dropout(0.5)
 
     def init_hidden(self, batch_size):
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         if self.bidirectional:
-            return (Variable(torch.zeros(2*self.lstm_layers, batch_size, self.lstm_hidden).cuda(), requires_grad=True),
-                    Variable(torch.zeros(2*self.lstm_layers, batch_size, self.lstm_hidden).cuda(), requires_grad=True))
+
+            return (Variable(torch.zeros(2*self.lstm_layers, batch_size, self.lstm_hidden).to(device), requires_grad=True),
+                    Variable(torch.zeros(2*self.lstm_layers, batch_size, self.lstm_hidden).to(device), requires_grad=True))
         else:
-            return (Variable(torch.zeros(self.lstm_layers, batch_size, self.lstm_hidden).cuda(), requires_grad=True),
-                    Variable(torch.zeros(self.lstm_layers, batch_size, self.lstm_hidden).cuda(), requires_grad=True))
+            return (Variable(torch.zeros(self.lstm_layers, batch_size, self.lstm_hidden).to(device), requires_grad=True),
+                    Variable(torch.zeros(self.lstm_layers, batch_size, self.lstm_hidden).to(device), requires_grad=True))
 
     def forward(self, x, lengths=None):
         batch_size, timesteps, C, H, W = x.size()
